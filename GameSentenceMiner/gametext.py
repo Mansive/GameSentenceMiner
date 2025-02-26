@@ -81,6 +81,7 @@ def handle_new_text_event(current_clipboard):
         current_line_after_regex = current_line
     current_line_time = datetime.now()
     line_history[current_line_after_regex] = current_line_time
+    line_history.move_to_end(current_line_after_regex)
     multi_mine_event_bus(current_line_after_regex, current_line_time)
     logger.debug(f"New Line: {current_clipboard}")
 
