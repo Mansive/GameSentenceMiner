@@ -164,7 +164,11 @@ def save_replay_buffer():
         replay_buffer_started = client.call(requests.GetReplayBufferStatus()).datain['outputActive']
         if replay_buffer_started:
             client.call(requests.SaveReplayBuffer())
+            time.sleep(1)
+            print(client.call(requests.GetLastReplayBufferReplay()).datain)
+            path = client.call(requests.GetLastReplayBufferReplay()).datain['savedReplayPath']
             logger.info("Replay buffer saved. If your log stops bere, make sure your obs output path matches \"Path To Watch\" in GSM settings.")
+            return path
         else:
             logger.error("Replay Buffer is not active, could not save Replay Buffer!")
     except Exception as e:

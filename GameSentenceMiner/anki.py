@@ -1,18 +1,13 @@
-import time
-
 import base64
 import subprocess
-import threading
 import urllib.request
-from datetime import datetime, timedelta
 from requests import post
 
-from GameSentenceMiner import obs, util, notification, ffmpeg
+from GameSentenceMiner import util, notification, ffmpeg
 from GameSentenceMiner.configuration import *
 from GameSentenceMiner.configuration import get_config
 from GameSentenceMiner.gametext import get_text_event
 from GameSentenceMiner.model import AnkiCard
-from GameSentenceMiner.utility_gui import get_utility_window
 from GameSentenceMiner.obs import get_current_game
 from GameSentenceMiner.util import remove_html_and_cloze_tags, combine_dialogue
 
@@ -22,9 +17,6 @@ screenshot_in_anki = None
 prev_screenshot_in_anki = None
 
 # Global variables to track state
-previous_note_ids = set()
-first_run = True
-card_queue = []
 
 
 def update_anki_card(last_note: AnkiCard, note=None, audio_path='', video_path='', tango='', reuse_audio=False,
@@ -231,47 +223,8 @@ def get_cards_by_sentence(sentence):
 
     return last_notes
 
-last_connection_error = datetime.now()
 
 # Check for new Anki cards and save replay buffer if detected
-def check_for_new_cards():
-    global previous_note_ids, first_run, last_connection_error
-    current_note_ids = set()
-    try:
-        current_note_ids = get_note_ids()
-    except Exception as e:
-        if datetime.now() - last_connection_error > timedelta(seconds=10):
-            logger.error(f"Error fetching Anki notes, Make sure Anki is running, ankiconnect add-on is installed, and url/port is configured correctly in GSM Settings")
-            last_connection_error = datetime.now()
-        return
-    new_card_ids = current_note_ids - previous_note_ids
-    if new_card_ids and not first_run:
-        try:
-            update_new_card()
-        except Exception as e:
-            logger.error("Error updating new card, Reason:", e)
-    first_run = False
-    previous_note_ids = current_note_ids  # Update the list of known notes
-
-
-def update_new_card():
-    last_card = get_last_anki_card()
-    if not last_card or not check_tags_for_should_update(last_card):
-        return
-    use_prev_audio = sentence_is_same_as_previous(last_card)
-    logger.info(f"last mined line: {util.get_last_mined_line()}, current sentence: {get_sentence(last_card)}")
-    logger.info(f"use previous audio: {use_prev_audio}")
-    if get_config().obs.get_game_from_scene:
-        obs.update_current_game()
-    if use_prev_audio:
-        lines = get_utility_window().get_selected_lines()
-        with util.lock:
-            update_anki_card(last_card, note=get_initial_card_info(last_card, lines), reuse_audio=True)
-        get_utility_window().reset_checkboxes()
-    else:
-        logger.info("New card(s) detected! Added to Processing Queue!")
-        card_queue.append(last_card)
-        obs.save_replay_buffer()
 
 
 def sentence_is_same_as_previous(last_card):
@@ -297,14 +250,6 @@ def check_tags_for_should_update(last_card):
 
 
 # Main function to handle the script lifecycle
-def monitor_anki():
-    try:
-        # Continuously check for new cards
-        while True:
-            check_for_new_cards()
-            time.sleep(get_config().anki.polling_rate / 1000.0)  # Check every 200ms
-    except KeyboardInterrupt:
-        print("Stopped Checking For Anki Cards...")
 
 
 # Fetch recent note IDs from Anki
@@ -317,11 +262,4 @@ def get_note_ids():
     result = response.json()
     return set(result['result'])
 
-
-def start_monitoring_anki():
-    # Start monitoring anki
-    if get_config().obs.enabled and get_config().features.full_auto:
-        obs_thread = threading.Thread(target=monitor_anki)
-        obs_thread.daemon = True  # Ensures the thread will exit when the main program exits
-        obs_thread.start()
 
